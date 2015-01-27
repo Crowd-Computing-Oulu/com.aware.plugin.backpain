@@ -1,0 +1,4 @@
+rename the project, rename if everywhere.
+
+delete .git
+
