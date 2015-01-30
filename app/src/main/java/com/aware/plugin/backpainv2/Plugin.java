@@ -7,9 +7,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+
 import android.util.Log;
 import android.widget.Toast;
 import android.database.Cursor;
+
 import java.util.Date;
 import java.text.SimpleDateFormat;
 
@@ -24,14 +26,19 @@ import java.util.Calendar;
 
 public class Plugin extends Aware_Plugin {
 
+    private final String MYTAG = "BACKPAINV2";
+
+    private final String BP_PREFS = "BPPLUGINPREFS";
+    private final String BP_UID = "BPUSERUID";
+
     private ESMStatusListener esm_statuses;
     private AlarmManager alarmManager;
-    private final String MYTAG = "BACKPAINV2";
     private PendingIntent nextAlarmIntent;
     private PendingIntent weeklyAlarmIntent;
 
     public static int nextQ; //ugly hack to get it running fast...had to get a debug access from many places
 
+    //TODO: use the initial alarm feature JUST to set the user ID and write that to the sharedprefs. What a great idea :)
     @Override
     public void onCreate() {
         super.onCreate();
@@ -53,10 +60,35 @@ public class Plugin extends Aware_Plugin {
         alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
 
         //TODO: check from sharedprefs that we have a valid UID, if not, then next one is zero. If we have, next one is 1
-        nextQ = 0;
-        //setQuickNextAlarm(15000); //in 15 secs..
-        setNextFridayAlarm();
+        if(getUserId() == null) {
+            nextQ = 0;
+            setInitialAlarm(15000); //in 15 secs..
+            Log.d(MYTAG, "No uid set, let's brute force the first q...");
+        } else {
+            nextQ = 1;
+            setNextFridayAlarm();
+            Log.d(MYTAG, "Uid set, let's just get on with the first q next Friday 20:00...");
+        }
 
+    }
+
+    private void setUserId(String newUID) {
+        SharedPreferences settings = getSharedPreferences(BP_PREFS, MODE_PRIVATE);
+        SharedPreferences.Editor prefEditor = settings.edit();
+        prefEditor.putString(BP_UID, newUID);
+        prefEditor.apply();
+    }
+
+    /**
+     * Gets the local user id stored in the prefs, and acquired with the question number 0.
+     * This is a mandatory thing to have, so if null is returned,something is wrong and
+     * we need to trigger q0
+     */
+    private String getUserId() {
+        String uid = null;
+        SharedPreferences settings = getSharedPreferences(BP_PREFS, MODE_PRIVATE);
+        uid = settings.getString(BP_UID, null);
+        return uid;
     }
 
     //@Override
@@ -66,44 +98,44 @@ public class Plugin extends Aware_Plugin {
     }*/
 
     private void setNextFridayAlarm() {
-        // create a back up logic in sharedprefs, store millis when last time the questionnaire was popped up and handle this in the startup oncreate
-
+        // create a back up logic in shared prefs, store millis when last time the questionnaire was popped up and handle this in the startup oncreate
         Calendar cal = Calendar.getInstance();
-
+        Log.d(MYTAG, "Cal now: " + cal.getTimeInMillis());
         int diff = Calendar.FRIDAY - cal.get(Calendar.DAY_OF_WEEK);
         if (diff < 0) {
             diff += 7;
         }
         cal.add(Calendar.DAY_OF_MONTH, diff);
-        cal.set(Calendar.HOUR, 20);
+        cal.set(Calendar.HOUR_OF_DAY, 20);
         cal.set(Calendar.MINUTE, 0);
         cal.set(Calendar.SECOND, 0);
-
-        Date triggerDate=new Date(cal.getTimeInMillis());
-
-        SimpleDateFormat sdf = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss.SSS");
-        String when = sdf.format(triggerDate); // formats to 09/23/2009 13:53:28.238
-
-        Log.d(MYTAG, "Going to pop up: " + when);
-
-
         //NOW, we should have next friday at eight... OR immediately if today is friday and it's already over 20:00
         Intent alarmIntent = new Intent(this, AlarmReceiver.class);
         alarmIntent.putExtra("qno", nextQ);
-        weeklyAlarmIntent = PendingIntent.getBroadcast(getApplicationContext(), nextQ, alarmIntent, PendingIntent.FLAG_ONE_SHOT);
+        int b_id = (int) System.currentTimeMillis();
+        weeklyAlarmIntent = PendingIntent.getBroadcast(getApplicationContext(), b_id, alarmIntent, PendingIntent.FLAG_ONE_SHOT);
         alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), weeklyAlarmIntent);
-        alarmManager.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), AlarmManager.INTERVAL_DAY * 7, weeklyAlarmIntent);
-
     }
 
-    private void setQuickNextAlarm(int millis) {
+    private void setInitialAlarm(int millis) {
         Calendar cal = Calendar.getInstance();
         Intent alarmIntent = new Intent(this, AlarmReceiver.class);
         alarmIntent.putExtra("qno", nextQ);
-        nextAlarmIntent = PendingIntent.getBroadcast(getApplicationContext(), nextQ, alarmIntent, PendingIntent.FLAG_ONE_SHOT);
+        int b_id = (int) System.currentTimeMillis();
+        nextAlarmIntent = PendingIntent.getBroadcast(getApplicationContext(), b_id, alarmIntent, PendingIntent.FLAG_ONE_SHOT);
         alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis() + millis, nextAlarmIntent);
-        Log.d(MYTAG, "An alarm all set...");
+        Log.d(MYTAG, "The initial alarm set...");
     }
+
+
+    private void nextPopup() {
+        Log.d(MYTAG, "NEXT Q: " + nextQ);
+        Intent queue_esm = new Intent(ESM.ACTION_AWARE_QUEUE_ESM);
+        String esmJSON = "[" + Questions.getInstance().getQuestion(nextQ) + "]";
+        queue_esm.putExtra(ESM.EXTRA_ESM, esmJSON);
+        sendBroadcast(queue_esm);
+    }
+
 
     @Override
     public void onDestroy() {
@@ -111,7 +143,7 @@ public class Plugin extends Aware_Plugin {
         Log.d(MYTAG, "BACK PAIN V2 deactivated");
         unregisterReceiver(esm_statuses);
 
-        if(weeklyAlarmIntent != null) {
+        if (weeklyAlarmIntent != null) {
             alarmManager.cancel(weeklyAlarmIntent);
         }
 
@@ -127,30 +159,24 @@ public class Plugin extends Aware_Plugin {
         private final String MYTAG = "BACKPAINV2";
 
         public void onReceive(Context context, Intent intent) {
-            Log.d(MYTAG, "ESM status received..");
             int lastQ = nextQ;
 
 
             if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_EXPIRED)) {
                 Log.d(MYTAG, "ESM EXPIRED.");
 
-                //for demo purposes, we'll proceed to next one, not following any logic
-                /*Plugin.nextQ++;
-                if(Plugin.nextQ <= 11){
-                    Plugin.this.setDebugAlarm(1000);
-                }*/
-                //TODO: ask what to do here?
+                //TODO: what to do here?
 
 
             } else if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_DISMISSED)) {
                 Log.d(MYTAG, "ESM DISMISSED.");
-                if (lastQ == 0){
+                if (lastQ == 0) {
                     //dismissed the VERY most important one, we'll just reschedule that one..sorry folks.
                     nextQ = 0;
-                    setQuickNextAlarm(1000);
+                    nextPopup();
                     return;
                 } else {
-                    //TODO: what to do with other questions?
+                    //TODO: what to do here?
                 }
 
 
@@ -159,22 +185,31 @@ public class Plugin extends Aware_Plugin {
                 //do nothing here...no need to!
             } else if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_ANSWERED)) {
                 //skiplogig...
-                Log.d(MYTAG, "ESM ANSWERED.");
 
                 String ans = null;
                 Cursor esm_answers = context.getContentResolver().query(ESM_Data.CONTENT_URI, null, null, null, null);
                 if (esm_answers != null && esm_answers.moveToLast()) {
                     ans = esm_answers.getString(esm_answers.getColumnIndex(ESM_Data.ANSWER));
-                    Log.d(MYTAG, "ESM ANSWER WAS:" + ans);
+                    Log.d(MYTAG, "ESM ANSWERED WITH:" + ans);
                 }
-                esm_answers.close();
+                if (esm_answers != null) {
+                    esm_answers.close();
+                }
+
                 if (ans == null) {
 
                     Log.d(MYTAG, "ANS was null - Returning...");
                     return;
                 }
 
-                if (lastQ == 1) {
+                if (lastQ == 0) {
+                    if (ans.trim().equalsIgnoreCase("")) {
+                        nextQ = 0;
+                    } else {
+                        setUserId(ans);
+                        nextQ = 1;
+                    }
+                } else if (lastQ == 1) {
                     if (ans.equalsIgnoreCase("No")) {
                         nextQ = 7;
                     } else {
@@ -204,7 +239,8 @@ public class Plugin extends Aware_Plugin {
                 } else {
                     nextQ++;
                 }
-                Plugin.this.setQuickNextAlarm(1000);
+                //Plugin.this.setQuickNextAlarm(1000);
+                nextPopup();
 
             }
         }
