@@ -26,19 +26,16 @@ import java.util.Calendar;
 
 public class Plugin extends Aware_Plugin {
 
+    public static int nextQ; //ugly hack to get it running fast...had to get a debug access from many places
     private final String MYTAG = "BACKPAINV2";
-
     private final String BP_PREFS = "BPPLUGINPREFS";
     private final String BP_UID = "BPUSERUID";
-
+    private final int WEEKLY_INTENT_RC = 909090;
     private ESMStatusListener esm_statuses;
     private AlarmManager alarmManager;
     private PendingIntent nextAlarmIntent;
     private PendingIntent weeklyAlarmIntent;
 
-    public static int nextQ; //ugly hack to get it running fast...had to get a debug access from many places
-
-    //TODO: use the initial alarm feature JUST to set the user ID and write that to the sharedprefs. What a great idea :)
     @Override
     public void onCreate() {
         super.onCreate();
@@ -59,24 +56,16 @@ public class Plugin extends Aware_Plugin {
 
         alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
 
-        //TODO: check from sharedprefs that we have a valid UID, if not, then next one is zero. If we have, next one is 1
-        if(getUserId() == null) {
+        if (getUserId() == null) {
             nextQ = 0;
-            setInitialAlarm(15000); //in 15 secs..
-            Log.d(MYTAG, "No uid set, let's brute force the first q...");
+            setDelayedPopup(15000); //in 15 secs..
+            Log.d(MYTAG, "No uid set, let's go through the setup first..pop up in 15 secs.");
         } else {
             nextQ = 1;
             setNextFridayAlarm();
             Log.d(MYTAG, "Uid set, let's just get on with the first q next Friday 20:00...");
         }
 
-    }
-
-    private void setUserId(String newUID) {
-        SharedPreferences settings = getSharedPreferences(BP_PREFS, MODE_PRIVATE);
-        SharedPreferences.Editor prefEditor = settings.edit();
-        prefEditor.putString(BP_UID, newUID);
-        prefEditor.apply();
     }
 
     /**
@@ -91,6 +80,13 @@ public class Plugin extends Aware_Plugin {
         return uid;
     }
 
+    private void setUserId(String newUID) {
+        SharedPreferences settings = getSharedPreferences(BP_PREFS, MODE_PRIVATE);
+        SharedPreferences.Editor prefEditor = settings.edit();
+        prefEditor.putString(BP_UID, newUID);
+        prefEditor.apply();
+    }
+
     //@Override
     /*public int onStartCommand(Intent intent, int flags, int startId) {
         sendBroadcast(new Intent(Aware.ACTION_AWARE_REFRESH));
@@ -98,6 +94,7 @@ public class Plugin extends Aware_Plugin {
     }*/
 
     private void setNextFridayAlarm() {
+        nextQ = 1; //we always start the weekly one from question number 1
         // create a back up logic in shared prefs, store millis when last time the questionnaire was popped up and handle this in the startup oncreate
         Calendar cal = Calendar.getInstance();
         Log.d(MYTAG, "Cal now: " + cal.getTimeInMillis());
@@ -105,19 +102,18 @@ public class Plugin extends Aware_Plugin {
         if (diff < 0) {
             diff += 7;
         }
-        cal.add(Calendar.DAY_OF_MONTH, diff);
+        //cal.add(Calendar.DAY_OF_MONTH, diff); TODO: uncomment this to make it every friday.
         cal.set(Calendar.HOUR_OF_DAY, 20);
         cal.set(Calendar.MINUTE, 0);
         cal.set(Calendar.SECOND, 0);
         //NOW, we should have next friday at eight... OR immediately if today is friday and it's already over 20:00
         Intent alarmIntent = new Intent(this, AlarmReceiver.class);
         alarmIntent.putExtra("qno", nextQ);
-        int b_id = (int) System.currentTimeMillis();
-        weeklyAlarmIntent = PendingIntent.getBroadcast(getApplicationContext(), b_id, alarmIntent, PendingIntent.FLAG_ONE_SHOT);
-        alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), weeklyAlarmIntent);
+        weeklyAlarmIntent = PendingIntent.getBroadcast(getApplicationContext(), WEEKLY_INTENT_RC, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), weeklyAlarmIntent); //use WEEKLY_INTENT_RC, so this gets overwritten in case we call this one twice...
     }
 
-    private void setInitialAlarm(int millis) {
+    private void setDelayedPopup(int millis) {
         Calendar cal = Calendar.getInstance();
         Intent alarmIntent = new Intent(this, AlarmReceiver.class);
         alarmIntent.putExtra("qno", nextQ);
@@ -128,7 +124,7 @@ public class Plugin extends Aware_Plugin {
     }
 
 
-    private void nextPopup() {
+    private void nextPopupNow() {
         Log.d(MYTAG, "NEXT Q: " + nextQ);
         Intent queue_esm = new Intent(ESM.ACTION_AWARE_QUEUE_ESM);
         String esmJSON = "[" + Questions.getInstance().getQuestion(nextQ) + "]";
@@ -163,26 +159,34 @@ public class Plugin extends Aware_Plugin {
 
 
             if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_EXPIRED)) {
-                Log.d(MYTAG, "ESM EXPIRED.");
 
-                //TODO: what to do here?
-
-
-            } else if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_DISMISSED)) {
-                Log.d(MYTAG, "ESM DISMISSED.");
                 if (lastQ == 0) {
+                    Log.d(MYTAG, "UID ESM EXPIRED. Try again immediately.");
                     //dismissed the VERY most important one, we'll just reschedule that one..sorry folks.
-                    nextQ = 0;
-                    nextPopup();
+                    nextPopupNow();
                     return;
                 } else {
-                    //TODO: what to do here?
+                    Log.d(MYTAG, "ESM EXPIRED. Try again in 5 mins.");
+                    setDelayedPopup(300000); // 5 mins = 5*60*1000 = 300000 millis
+                    return;
                 }
 
 
-            } else if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_QUEUE_COMPLETE)) {
-                Log.d(MYTAG, "ESM QUEUE COMPLETE.");
-                //do nothing here...no need to!
+            } else if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_DISMISSED)) {
+
+                if (lastQ == 0) {
+                    Log.d(MYTAG, "UID ESM DISMISSED. Try again immediately.");
+                    //dismissed the VERY most important one, we'll just reschedule that one..sorry folks.
+                    nextQ = 0;
+                    nextPopupNow();
+                    return;
+                } else {
+                    Log.d(MYTAG, "ESM DISMISSED.  Try again in 5 mins.");
+                    setDelayedPopup(30*1000); //TODO: 5 mins = 5*60*1000 = 300000 millis, now 30secs
+                    return;
+                }
+
+
             } else if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_ANSWERED)) {
                 //skiplogig...
 
@@ -197,12 +201,13 @@ public class Plugin extends Aware_Plugin {
                 }
 
                 if (ans == null) {
-
-                    Log.d(MYTAG, "ANS was null - Returning...");
+                    Log.d(MYTAG, "ANS was null - set next Fri ...");
+                    setNextFridayAlarm();
                     return;
                 }
 
                 if (lastQ == 0) {
+                    //uid question should not be empty, request again if it is
                     if (ans.trim().equalsIgnoreCase("")) {
                         nextQ = 0;
                     } else {
@@ -224,7 +229,6 @@ public class Plugin extends Aware_Plugin {
                 } else if (lastQ == 10) {
 
                     if (ans.equalsIgnoreCase("No")) {
-                        nextQ = 1;
                         //we're done, ladies and gentlemen, see you next week!
                         setNextFridayAlarm();
                         return;
@@ -232,7 +236,6 @@ public class Plugin extends Aware_Plugin {
                         nextQ = 11;
                     }
                 } else if (lastQ == 11) {
-                    nextQ = 1;
                     //we're done, ladies and gentlemen, see you next week!
                     setNextFridayAlarm();
                     return;
@@ -240,8 +243,7 @@ public class Plugin extends Aware_Plugin {
                     nextQ++;
                 }
                 //Plugin.this.setQuickNextAlarm(1000);
-                nextPopup();
-
+                nextPopupNow();
             }
         }
     }
