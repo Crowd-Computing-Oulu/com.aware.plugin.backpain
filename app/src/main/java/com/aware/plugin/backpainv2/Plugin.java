@@ -36,6 +36,8 @@ public class Plugin extends Aware_Plugin {
     private PendingIntent nextAlarmIntent;
     private PendingIntent weeklyAlarmIntent;
 
+    private int attemptNo; //TODO if user cancels, we'll let him cancel 3 times. Then schedule next week.
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -48,7 +50,6 @@ public class Plugin extends Aware_Plugin {
 
         //listen to ESM notifications
         IntentFilter esm_filter = new IntentFilter();
-        esm_filter.addAction(ESM.ACTION_AWARE_ESM_QUEUE_COMPLETE);
         esm_filter.addAction(ESM.ACTION_AWARE_ESM_DISMISSED);
         esm_filter.addAction(ESM.ACTION_AWARE_ESM_EXPIRED);
         esm_filter.addAction(ESM.ACTION_AWARE_ESM_ANSWERED);
@@ -65,6 +66,7 @@ public class Plugin extends Aware_Plugin {
             Log.d(MYTAG, "Uid set, let's just get on with the first q next Friday 20:00...");
             setNextFridayAlarm();
         }
+        attemptNo = 0;
 
     }
 
