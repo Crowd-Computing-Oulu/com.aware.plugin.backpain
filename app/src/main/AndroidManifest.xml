@@ -8,7 +8,7 @@
         android:icon="@drawable/ic_launcher">
 
         <service android:name="com.aware.plugin.backpainv2.Plugin" android:exported="true"></service>
-        <receiver android:name=".AlarmReceiver" />
+        <receiver android:name="com.aware.plugin.backpainv2.AlarmReceiver" />
 
     </application>
 

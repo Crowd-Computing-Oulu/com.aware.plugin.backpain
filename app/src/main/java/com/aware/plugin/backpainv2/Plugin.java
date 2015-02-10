@@ -43,6 +43,7 @@ public class Plugin extends Aware_Plugin {
         super.onCreate();
 
         esm_statuses = new ESMStatusListener();
+
         Log.d(MYTAG, "CREATING THE BACK PAIN PLUGIN, ONCREATE()");
         Toast.makeText(getBaseContext(), "Selkäkipututkimus aloitettu.", Toast.LENGTH_LONG).show();
         Aware.setSetting(getApplicationContext(), Aware_Preferences.STATUS_ESM, true);
