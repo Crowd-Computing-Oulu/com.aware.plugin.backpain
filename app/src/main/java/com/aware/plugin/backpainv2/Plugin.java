@@ -12,9 +12,6 @@ import android.util.Log;
 import android.widget.Toast;
 import android.database.Cursor;
 
-import java.util.Date;
-import java.text.SimpleDateFormat;
-
 import com.aware.Aware;
 import com.aware.Aware_Preferences;
 import com.aware.ESM;
@@ -67,7 +64,7 @@ public class Plugin extends Aware_Plugin {
             Log.d(MYTAG, "Uid set, let's just get on with the first q next Friday 20:00...");
             setNextFridayAlarm();
         }
-        attemptNo = 0;
+        attemptNo = 1; //first attempt to get data, every cancel = dismiss increases this...
 
     }
 
@@ -97,6 +94,7 @@ public class Plugin extends Aware_Plugin {
     }*/
 
     private void setNextFridayAlarm() {
+        attemptNo = 1;
         nextQ = 1; //we always start the weekly one from question number 1
         // create a back up logic in shared prefs, store millis when last time the questionnaire was popped up and handle this in the startup oncreate
         Calendar cal = Calendar.getInstance();
@@ -212,8 +210,14 @@ public class Plugin extends Aware_Plugin {
                     nextPopupNow();
                     return;
                 } else {
+                    if(attemptNo == 4) {
+                        //already had 3 chances, see you next week!
+                        setNextFridayAlarm();
+                        return;
+                    }
+                    attemptNo++;
                     Log.d(MYTAG, "ESM DISMISSED.  Try again in a minute.");
-                    setDelayedPopup(60*1000);
+                    setDelayedPopup(600000); // 5 mins = 10*60*1000 = 300000 millis
                     return;
                 }
 
