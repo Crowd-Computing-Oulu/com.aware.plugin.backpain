@@ -215,6 +215,7 @@ public class Plugin extends Aware_Plugin {
                         setNextFridayAlarm();
                         return;
                     }
+                    //TODO depending on attemptNO, delay it 15, 15, DAY, DAY... then give up
                     attemptNo++;
                     Log.d(MYTAG, "ESM DISMISSED.  Try again in a minute.");
                     setDelayedPopup(600000); // 5 mins = 10*60*1000 = 300000 millis
