@@ -19,6 +19,8 @@ import com.aware.utils.Aware_Plugin;
 import com.aware.providers.ESM_Provider.*;
 
 import java.util.Calendar;
+import java.util.Date;
+import java.text.SimpleDateFormat;
 
 
 public class Plugin extends Aware_Plugin {
@@ -30,16 +32,23 @@ public class Plugin extends Aware_Plugin {
     private final int WEEKLY_INTENT_RC = 909090;
     private ESMStatusListener esm_statuses;
     private AlarmManager alarmManager;
-    private PendingIntent nextAlarmIntent;
-    private PendingIntent weeklyAlarmIntent;
 
-    private int attemptNo; //TODO if user cancels, we'll let him cancel 3 times. Then schedule next week.
+    private Intent nextIntent;
+    private Intent nextWeeklyIntent;
+
+    private PendingIntent nextPendingIntent;
+    private PendingIntent weeklyPendingIntent;
+
+    private int attemptNo;
 
     @Override
     public void onCreate() {
         super.onCreate();
 
         esm_statuses = new ESMStatusListener();
+
+        nextIntent = new Intent(this, AlarmReceiver.class);
+        nextWeeklyIntent = new Intent(this, AlarmReceiver.class);
 
         Log.d(MYTAG, "CREATING THE BACK PAIN PLUGIN, ONCREATE()");
         Toast.makeText(getBaseContext(), "Selkäkipututkimus aloitettu.", Toast.LENGTH_LONG).show();
@@ -62,9 +71,10 @@ public class Plugin extends Aware_Plugin {
         } else {
             nextQ = 1;
             Log.d(MYTAG, "Uid set, let's just get on with the first q next Friday 20:00...");
-            setNextFridayAlarm();
+            setNextAlarm();
         }
         attemptNo = 1; //first attempt to get data, every cancel = dismiss increases this...
+
 
     }
 
@@ -77,7 +87,9 @@ public class Plugin extends Aware_Plugin {
         String uid = null;
         SharedPreferences settings = getSharedPreferences(BP_PREFS, MODE_PRIVATE);
         uid = settings.getString(BP_UID, null);
+        Log.d(MYTAG, "GET UID FROM PREFS: " + uid);
         return uid;
+
     }
 
     private void setUserId(String newUID) {
@@ -85,46 +97,62 @@ public class Plugin extends Aware_Plugin {
         SharedPreferences.Editor prefEditor = settings.edit();
         prefEditor.putString(BP_UID, newUID);
         prefEditor.apply();
+        Log.d(MYTAG, "SET UID TO PREFS: " + newUID);
     }
 
     //@Override
-    /*public int onStartCommand(Intent intent, int flags, int startId) {
-        sendBroadcast(new Intent(Aware.ACTION_AWARE_REFRESH));
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(MYTAG, "onStartCommand!");
+        setNextAlarm(); //let's just make sure it's there! It overrides the old one, so no harm done.
         return START_STICKY;
-    }*/
+    }
 
-    private void setNextFridayAlarm() {
+    private void setNextAlarm() {
         attemptNo = 1;
-        nextQ = 1; //we always start the weekly one from question number 1
-        // create a back up logic in shared prefs, store millis when last time the questionnaire was popped up and handle this in the startup oncreate
+        //nextQ NEEDS to be synced elsewhere..hopefully it is!
         Calendar cal = Calendar.getInstance();
-        //Log.d(MYTAG, "Cal now: " + cal.getTimeInMillis());
+
         int diff = Calendar.FRIDAY - cal.get(Calendar.DAY_OF_WEEK);
-        if (diff <= 0) {
-            //TODO: debug this on friday. If the difference is zero, next time should be NEXT week's friday. otherwise we'll end up in a nasty loop 8pm..
+
+        int hourNow = cal.get(Calendar.HOUR_OF_DAY); //can be from 0 to 23
+        int minuteNow = cal.get(Calendar.MINUTE); //can be from 0 to 23
+
+        if (diff < 0) {
             diff += 7;
+            cal.add(Calendar.DAY_OF_MONTH, diff);
+        } else if (diff == 0 && hourNow < 20) {
+            //now, it's friday but not yet 20:00! No need to adjust day.
+        } else if (diff == 0 && hourNow >= 20) {
+            //now, it's friday but after 20:00! Let's schedule it next week.
+            cal.add(Calendar.DAY_OF_MONTH, 7);
+        } else {
+            cal.add(Calendar.DAY_OF_MONTH, diff);
         }
-        //cal.add(Calendar.DAY_OF_MONTH, diff); TODO: uncomment this to make it every friday.
-        cal.add(Calendar.DAY_OF_MONTH, 1); //TODO kill this, now it's just setting it always for TOMORROW
         cal.set(Calendar.HOUR_OF_DAY, 20);
         cal.set(Calendar.MINUTE, 0);
         cal.set(Calendar.SECOND, 0);
-        //NOW, we should have next friday at eight... OR immediately if today is friday and it's already over 20:00
-        Intent alarmIntent = new Intent(this, AlarmReceiver.class);
-        alarmIntent.putExtra("qno", nextQ);
-        weeklyAlarmIntent = PendingIntent.getBroadcast(getApplicationContext(), WEEKLY_INTENT_RC, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT);
-        alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), weeklyAlarmIntent); //use WEEKLY_INTENT_RC, so this gets overwritten in case we call this one twice...
+
+        SimpleDateFormat sdf = new SimpleDateFormat("MMM dd,yyyy HH:mm");
+        Date readable = new Date(cal.getTimeInMillis());
+        Toast.makeText(getBaseContext(), sdf.format(readable), Toast.LENGTH_LONG).show();
+
+
+
+        //TODO: does this really update... WE WANT ONLY ONE alarm!
+        nextWeeklyIntent.putExtra("qno", 1); //ALWAYS the next friday's one starts from question number one!
+        weeklyPendingIntent = PendingIntent.getBroadcast(getApplicationContext(), WEEKLY_INTENT_RC, nextWeeklyIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), weeklyPendingIntent); //use WEEKLY_INTENT_RC, so this gets overwritten in case we call this one twice...
         Log.d(MYTAG, "Set alarm for :" + cal.getTimeInMillis());
     }
 
     private void setDelayedPopup(int millis) {
         Calendar cal = Calendar.getInstance();
-        Intent alarmIntent = new Intent(this, AlarmReceiver.class);
-        alarmIntent.putExtra("qno", nextQ);
+        nextIntent.putExtra("qno", nextQ);
         int b_id = (int) System.currentTimeMillis();
-        nextAlarmIntent = PendingIntent.getBroadcast(getApplicationContext(), b_id, alarmIntent, PendingIntent.FLAG_ONE_SHOT);
-        alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis() + millis, nextAlarmIntent);
-        Log.d(MYTAG, "The initial alarm set...");
+        nextPendingIntent = PendingIntent.getBroadcast(getApplicationContext(), b_id, nextIntent, PendingIntent.FLAG_ONE_SHOT);
+        alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis() + millis, nextPendingIntent);
+        long millisStr = cal.getTimeInMillis() + millis;
+        Log.d(MYTAG, "Set a delayed popup for millis: " + millisStr);
     }
 
 
@@ -140,15 +168,14 @@ public class Plugin extends Aware_Plugin {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.d(MYTAG, "BACK PAIN V2 deactivated");
         unregisterReceiver(esm_statuses);
 
-        if (weeklyAlarmIntent != null) {
-            alarmManager.cancel(weeklyAlarmIntent);
+        if (weeklyPendingIntent != null) {
+            alarmManager.cancel(weeklyPendingIntent);
         }
 
-        if (nextAlarmIntent != null) {
-            alarmManager.cancel(nextAlarmIntent);
+        if (nextPendingIntent != null) {
+            alarmManager.cancel(nextPendingIntent);
         }
 
         Aware.setSetting(getApplicationContext(), Aware_Preferences.STATUS_ESM, false);
@@ -168,7 +195,7 @@ public class Plugin extends Aware_Plugin {
             if (esm_data != null && esm_data.moveToLast()) {
                 ans = esm_data.getString(esm_data.getColumnIndex(ESM_Data.ANSWER));
                 trigger = esm_data.getString(esm_data.getColumnIndex(ESM_Data.TRIGGER));
-                Log.d(MYTAG, "ESM ANSWERED WITH:" + ans + " and triggered by: " + trigger);
+
             }
             if (esm_data != null) {
                 esm_data.close();
@@ -188,10 +215,12 @@ public class Plugin extends Aware_Plugin {
 
 
             if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_EXPIRED)) {
+                Log.d(MYTAG, "ESM EXPIRED");
 
                 if (lastQ == 0) {
                     Log.d(MYTAG, "UID ESM EXPIRED. Try again immediately.");
                     //dismissed the VERY most important one, we'll just reschedule that one..sorry folks.
+                    nextQ = 0;
                     nextPopupNow();
                     return;
                 } else {
@@ -202,23 +231,30 @@ public class Plugin extends Aware_Plugin {
 
 
             } else if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_DISMISSED)) {
+                Log.d(MYTAG, "ESM DISMISSED");
+
 
                 if (lastQ == 0) {
-                    Log.d(MYTAG, "UID ESM DISMISSED. Try again immediately.");
                     //dismissed the VERY most important one, we'll just reschedule that one..sorry folks.
                     nextQ = 0;
                     nextPopupNow();
                     return;
-                } else {
-                    if(attemptNo == 4) {
+                } else if(lastQ == 1) {
+                    //the user may cancel the whole set of questions, otherwise he'll have to finish it!
+                    if (attemptNo == 1 || attemptNo == 2){
+                        attemptNo++;
+                        setDelayedPopup(15*60*1000); // 15 mins = 15*60*1000 = 300000 millis
+                    } else if (attemptNo == 3 || attemptNo == 4){
+                        attemptNo++;
+                        setDelayedPopup(24*60*60*1000); // a day
+                    } else if(attemptNo == 5) {
                         //already had 3 chances, see you next week!
-                        setNextFridayAlarm();
-                        return;
+                        setNextAlarm();
                     }
-                    //TODO depending on attemptNO, delay it 15, 15, DAY, DAY... then give up
-                    attemptNo++;
-                    Log.d(MYTAG, "ESM DISMISSED.  Try again in a minute.");
-                    setDelayedPopup(600000); // 5 mins = 10*60*1000 = 300000 millis
+                    return;
+                } else {
+                    //other questions, let's make the user answer them!
+                    nextPopupNow();
                     return;
                 }
 
@@ -251,19 +287,18 @@ public class Plugin extends Aware_Plugin {
 
                     if (ans.equalsIgnoreCase("Ei")) {
                         //we're done, ladies and gentlemen, see you next week!
-                        setNextFridayAlarm();
+                        setNextAlarm();
                         return;
                     } else {
                         nextQ = 11;
                     }
                 } else if (lastQ == 11) {
                     //we're done, ladies and gentlemen, see you next week!
-                    setNextFridayAlarm();
+                    setNextAlarm();
                     return;
                 } else {
                     nextQ++;
                 }
-                //Plugin.this.setQuickNextAlarm(1000);
                 nextPopupNow();
             }
         }
