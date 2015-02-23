@@ -100,6 +100,11 @@ public class Plugin extends Aware_Plugin {
         Log.d(MYTAG, "SET UID TO PREFS: " + newUID);
     }
 
+    public void setNextQ(int q){
+        nextQ = q;
+
+    }
+
     //@Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(MYTAG, "onStartCommand!");
