@@ -69,8 +69,9 @@ public class Plugin extends Aware_Plugin {
             Log.d(MYTAG, "No uid set, let's go through the setup first..pop up in 15 secs.");
             setDelayedPopup(5000); //in 5 secs..
         } else {
-            nextQ = 1;
             Log.d(MYTAG, "Uid set, let's just get on with the first q next Friday 20:00...");
+            nextQ = 1;
+            attemptNo = 1;
             setNextAlarm();
         }
         attemptNo = 1; //first attempt to get data, every cancel = dismiss increases this...
@@ -112,6 +113,28 @@ public class Plugin extends Aware_Plugin {
         return START_STICKY;
     }
 
+    /*private void setNextAlarm() {
+        //nextQ NEEDS to be synced elsewhere..hopefully it is!
+        Calendar cal = Calendar.getInstance();
+
+
+
+        int minuteNow = cal.get(Calendar.MINUTE); //can be from 0 to 23
+        cal.add(Calendar.MINUTE, 2);
+
+        SimpleDateFormat sdf = new SimpleDateFormat("MMM dd,yyyy HH:mm:ss");
+        Date readable = new Date(cal.getTimeInMillis());
+        Toast.makeText(getBaseContext(), sdf.format(readable), Toast.LENGTH_LONG).show();
+
+
+
+        nextWeeklyIntent.putExtra("qno", 1); //ALWAYS the next friday's one starts from question number one!
+        weeklyPendingIntent = PendingIntent.getBroadcast(getApplicationContext(), WEEKLY_INTENT_RC, nextWeeklyIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), weeklyPendingIntent); //use WEEKLY_INTENT_RC, so this gets overwritten in case we call this one twice...
+        Log.d(MYTAG, "Set alarm for :" + sdf.format(readable));
+    }*/
+
+
     private void setNextAlarm() {
         attemptNo = 1;
         //nextQ NEEDS to be synced elsewhere..hopefully it is!
@@ -136,14 +159,12 @@ public class Plugin extends Aware_Plugin {
         cal.set(Calendar.HOUR_OF_DAY, 20);
         cal.set(Calendar.MINUTE, 0);
         cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
 
         SimpleDateFormat sdf = new SimpleDateFormat("MMM dd,yyyy HH:mm");
         Date readable = new Date(cal.getTimeInMillis());
         Toast.makeText(getBaseContext(), sdf.format(readable), Toast.LENGTH_LONG).show();
 
-
-
-        //TODO: does this really update... WE WANT ONLY ONE alarm!
         nextWeeklyIntent.putExtra("qno", 1); //ALWAYS the next friday's one starts from question number one!
         weeklyPendingIntent = PendingIntent.getBroadcast(getApplicationContext(), WEEKLY_INTENT_RC, nextWeeklyIntent, PendingIntent.FLAG_UPDATE_CURRENT);
         alarmManager.set(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), weeklyPendingIntent); //use WEEKLY_INTENT_RC, so this gets overwritten in case we call this one twice...
@@ -253,7 +274,9 @@ public class Plugin extends Aware_Plugin {
                         attemptNo++;
                         setDelayedPopup(24*60*60*1000); // a day
                     } else if(attemptNo == 5) {
-                        //already had 3 chances, see you next week!
+                        //already had 4 chances, see you next week!
+                        nextQ = 1;
+                        attemptNo = 1;
                         setNextAlarm();
                     }
                     return;
@@ -292,6 +315,8 @@ public class Plugin extends Aware_Plugin {
 
                     if (ans.equalsIgnoreCase("Ei")) {
                         //we're done, ladies and gentlemen, see you next week!
+                        nextQ = 1;
+                        attemptNo = 1;
                         setNextAlarm();
                         return;
                     } else {
@@ -299,6 +324,8 @@ public class Plugin extends Aware_Plugin {
                     }
                 } else if (lastQ == 11) {
                     //we're done, ladies and gentlemen, see you next week!
+                    nextQ = 1;
+                    attemptNo = 1;
                     setNextAlarm();
                     return;
                 } else {
@@ -308,4 +335,5 @@ public class Plugin extends Aware_Plugin {
             }
         }
     }
+
 }

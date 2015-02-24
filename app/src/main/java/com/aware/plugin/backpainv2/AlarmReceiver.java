@@ -21,11 +21,9 @@ public class AlarmReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
+
         int q = intent.getIntExtra("qno", -1);
-        if (q == 1){
-            Plugin p = ((Plugin)context.getApplicationContext());
-            p.setNextQ(1);
-        }
+        Log.d(MYTAG, "Got a request to popup q no: " + q);
         Intent queue_esm = new Intent(ESM.ACTION_AWARE_QUEUE_ESM);
         String esmJSON = "[" + Questions.getInstance().getQuestion(q) + "]";
         queue_esm.putExtra(ESM.EXTRA_ESM, esmJSON);
