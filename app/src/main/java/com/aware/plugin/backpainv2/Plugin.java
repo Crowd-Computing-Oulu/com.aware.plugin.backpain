@@ -52,8 +52,6 @@ public class Plugin extends Aware_Plugin {
 
         Log.d(MYTAG, "CREATING THE BACK PAIN PLUGIN, ONCREATE()");
         Toast.makeText(getBaseContext(), "Selkäkipututkimus aloitettu.", Toast.LENGTH_LONG).show();
-        Aware.setSetting(getApplicationContext(), Aware_Preferences.STATUS_ESM, true);
-        Aware.setSetting(getApplicationContext(), Aware_Preferences.DEBUG_FLAG, true);
 
         //listen to ESM notifications
         IntentFilter esm_filter = new IntentFilter();
@@ -72,11 +70,8 @@ public class Plugin extends Aware_Plugin {
             Log.d(MYTAG, "Uid set, let's just get on with the first q next Friday 20:00...");
             nextQ = 1;
             attemptNo = 1;
-            setNextAlarm();
+            setNextFridayAlarm();
         }
-        attemptNo = 1; //first attempt to get data, every cancel = dismiss increases this...
-
-
     }
 
     /**
@@ -109,7 +104,7 @@ public class Plugin extends Aware_Plugin {
     //@Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(MYTAG, "onStartCommand!");
-        setNextAlarm(); //let's just make sure it's there! It overrides the old one, so no harm done.
+        setNextFridayAlarm(); //let's just make sure it's there! It overrides the old one, so no harm done.
         return START_STICKY;
     }
 
@@ -135,9 +130,7 @@ public class Plugin extends Aware_Plugin {
     }*/
 
 
-    private void setNextAlarm() {
-        attemptNo = 1;
-        //nextQ NEEDS to be synced elsewhere..hopefully it is!
+    private void setNextFridayAlarm() {
         Calendar cal = Calendar.getInstance();
 
         int diff = Calendar.FRIDAY - cal.get(Calendar.DAY_OF_WEEK);
@@ -203,8 +196,6 @@ public class Plugin extends Aware_Plugin {
         if (nextPendingIntent != null) {
             alarmManager.cancel(nextPendingIntent);
         }
-
-        Aware.setSetting(getApplicationContext(), Aware_Preferences.STATUS_ESM, false);
         sendBroadcast(new Intent(Aware.ACTION_AWARE_REFRESH));
     }
 
@@ -257,7 +248,7 @@ public class Plugin extends Aware_Plugin {
 
 
             } else if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_DISMISSED)) {
-                Log.d(MYTAG, "ESM DISMISSED");
+                Log.d(MYTAG, "ESM CANCELED BY USER");
 
 
                 if (lastQ == 0) {
@@ -266,18 +257,18 @@ public class Plugin extends Aware_Plugin {
                     nextPopupNow();
                     return;
                 } else if(lastQ == 1) {
-                    //the user may cancel the whole set of questions, otherwise he'll have to finish it!
+                    //the user may cancel the whole set of questions, otherwise he'll have to finish it if started
                     if (attemptNo == 1 || attemptNo == 2){
                         attemptNo++;
                         setDelayedPopup(15*60*1000); // 15 mins = 15*60*1000 = 300000 millis
                     } else if (attemptNo == 3 || attemptNo == 4){
                         attemptNo++;
-                        setDelayedPopup(24*60*60*1000); // a day
+                        setDelayedPopup(24*60*60*1000); // 24 hours
                     } else if(attemptNo == 5) {
                         //already had 4 chances, see you next week!
                         nextQ = 1;
                         attemptNo = 1;
-                        setNextAlarm();
+                        setNextFridayAlarm();
                     }
                     return;
                 } else {
@@ -317,7 +308,7 @@ public class Plugin extends Aware_Plugin {
                         //we're done, ladies and gentlemen, see you next week!
                         nextQ = 1;
                         attemptNo = 1;
-                        setNextAlarm();
+                        setNextFridayAlarm();
                         return;
                     } else {
                         nextQ = 11;
@@ -326,7 +317,7 @@ public class Plugin extends Aware_Plugin {
                     //we're done, ladies and gentlemen, see you next week!
                     nextQ = 1;
                     attemptNo = 1;
-                    setNextAlarm();
+                    setNextFridayAlarm();
                     return;
                 } else {
                     nextQ++;
