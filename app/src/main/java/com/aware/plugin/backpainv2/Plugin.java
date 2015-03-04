@@ -96,11 +96,6 @@ public class Plugin extends Aware_Plugin {
         Log.d(MYTAG, "SET UID TO PREFS: " + newUID);
     }
 
-    public void setNextQ(int q){
-        nextQ = q;
-
-    }
-
     //@Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         Log.d(MYTAG, "onStartCommand!");
@@ -111,8 +106,6 @@ public class Plugin extends Aware_Plugin {
     /*private void setNextAlarm() {
         //nextQ NEEDS to be synced elsewhere..hopefully it is!
         Calendar cal = Calendar.getInstance();
-
-
 
         int minuteNow = cal.get(Calendar.MINUTE); //can be from 0 to 23
         cal.add(Calendar.MINUTE, 2);
@@ -144,7 +137,7 @@ public class Plugin extends Aware_Plugin {
         } else if (diff == 0 && hourNow < 20) {
             //now, it's friday but not yet 20:00! No need to adjust day.
         } else if (diff == 0 && hourNow >= 20) {
-            //now, it's friday but after 20:00! Let's schedule it next week.
+            //now, it's friday but after or exactly 20:00! Let's schedule it next week.
             cal.add(Calendar.DAY_OF_MONTH, 7);
         } else {
             cal.add(Calendar.DAY_OF_MONTH, diff);
@@ -256,29 +249,28 @@ public class Plugin extends Aware_Plugin {
                     nextQ = 0;
                     nextPopupNow();
                     return;
-                } else if(lastQ == 1) {
-                    //the user may cancel the whole set of questions, otherwise he'll have to finish it if started
-                    if (attemptNo == 1 || attemptNo == 2){
+                } else {
+                    //5, 15, 1 hour, day -> done
+                    if (attemptNo == 1){
                         attemptNo++;
-                        setDelayedPopup(15*60*1000); // 15 mins = 15*60*1000 = 300000 millis
-                    } else if (attemptNo == 3 || attemptNo == 4){
+                        setDelayedPopup(5*60*1000); // 5 mins
+                    }  else if (attemptNo == 2){
                         attemptNo++;
-                        setDelayedPopup(24*60*60*1000); // 24 hours
-                    } else if(attemptNo == 5) {
-                        //already had 4 chances, see you next week!
+                        setDelayedPopup(15*60*1000); // 15 mins
+                    } else if (attemptNo == 3){
+                        attemptNo++;
+                        setDelayedPopup(60*60*1000); // 1 hour
+                    } else if (attemptNo == 4){
                         nextQ = 1;
                         attemptNo = 1;
                         setNextFridayAlarm();
                     }
                     return;
-                } else {
-                    //other questions, let's make the user answer them!
-                    nextPopupNow();
-                    return;
                 }
 
 
             } else if (intent.getAction().equals(ESM.ACTION_AWARE_ESM_ANSWERED)) {
+                attemptNo = 1; // Yep! We got a proper answer, so next time let's just assume it's attempt number one!
                 //skiplogig...
 
 
