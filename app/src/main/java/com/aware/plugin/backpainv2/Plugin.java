@@ -25,7 +25,7 @@ import java.text.SimpleDateFormat;
 
 public class Plugin extends Aware_Plugin {
 
-    public static int nextQ; //ugly hack to get it running fast...had to get a debug access from many places
+    public static int nextQ;
     private final String MYTAG = "BACKPAINV2";
     private final String BP_PREFS = "BPPLUGINPREFS";
     private final String BP_UID = "BPUSERUID";
@@ -135,9 +135,9 @@ public class Plugin extends Aware_Plugin {
             diff += 7;
             cal.add(Calendar.DAY_OF_MONTH, diff);
         } else if (diff == 0 && hourNow < 20) {
-            //now, it's friday but not yet 20:00! No need to adjust day.
+            //now, it's friday but not yet 20:00! No need to adjust day. This empty block here just for clarity..
         } else if (diff == 0 && hourNow >= 20) {
-            //now, it's friday but after or exactly 20:00! Let's schedule it next week.
+            //now, it's friday but after or 20 hour Let's schedule it next week.
             cal.add(Calendar.DAY_OF_MONTH, 7);
         } else {
             cal.add(Calendar.DAY_OF_MONTH, diff);
@@ -149,7 +149,8 @@ public class Plugin extends Aware_Plugin {
 
         SimpleDateFormat sdf = new SimpleDateFormat("MMM dd,yyyy HH:mm");
         Date readable = new Date(cal.getTimeInMillis());
-        Toast.makeText(getBaseContext(), sdf.format(readable), Toast.LENGTH_LONG).show();
+        String txt = "Seuraava kysely: " + sdf.format(readable);
+        Toast.makeText(getBaseContext(), txt, Toast.LENGTH_LONG).show();
 
         nextWeeklyIntent.putExtra("qno", 1); //ALWAYS the next friday's one starts from question number one!
         weeklyPendingIntent = PendingIntent.getBroadcast(getApplicationContext(), WEEKLY_INTENT_RC, nextWeeklyIntent, PendingIntent.FLAG_UPDATE_CURRENT);
